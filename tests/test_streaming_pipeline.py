@@ -10,6 +10,7 @@ from unittest.mock import patch
 from hinana_voice import (
     StreamingSentenceBuffer,
     stream_llm_text,
+    translate_to_korean,
     voicepeak_character_count,
 )
 
@@ -70,6 +71,17 @@ class StreamingPipelineTests(unittest.TestCase):
         )
         self.assertIs(client.responses.arguments["stream"], True)
         self.assertEqual(client.responses.arguments["model"], "gpt-5.6-sol")
+
+    def test_translate_to_korean_uses_same_model_and_returns_text(self):
+        client = FakeClient([])
+        client.responses.create = lambda **kwargs: SimpleNamespace(
+            output_text="야하~ 프로듀서, 반가워요!"
+        )
+
+        self.assertEqual(
+            translate_to_korean(client, "gpt-5.6-sol", "やは～、プロデューサー。"),
+            "야하~ 프로듀서, 반가워요!",
+        )
 
     def test_sentence_buffer_releases_complete_sentences_immediately(self):
         buffer = StreamingSentenceBuffer()
@@ -132,6 +144,11 @@ class StreamingPipelineTests(unittest.TestCase):
                     "stream_llm_text",
                     return_value=iter(["一番目です。", "二番目です。"]),
                 ),
+                patch.object(
+                    hinana_bridge,
+                    "translate_to_korean",
+                    return_value="첫 번째예요. 두 번째예요.",
+                ),
                 patch.object(hinana_bridge, "make_voicepeak_wav", side_effect=fake_make_wav),
                 patch.object(hinana_bridge, "play_to_device", side_effect=fake_play),
                 patch.object(
@@ -158,6 +175,10 @@ class StreamingPipelineTests(unittest.TestCase):
             ["一番目です。", "二番目です。"],
         )
         self.assertEqual(emitted[-1][0], "done")
+        self.assertEqual(
+            [payload["text"] for event, payload in emitted if event == "translation"],
+            ["첫 번째예요. 두 번째예요."],
+        )
 
 
 if __name__ == "__main__":

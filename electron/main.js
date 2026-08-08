@@ -1,10 +1,16 @@
-const { app, BrowserWindow, ipcMain, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
 let mainWindow;
 let activeChatProcess;
+const GITHUB_URL = "https://github.com/murikubo/HinanaVoice";
+
+function openAboutDialog() {
+  const window = BrowserWindow.getFocusedWindow() || mainWindow;
+  window?.webContents.send("about:open");
+}
 
 function createApplicationMenu() {
   const template = [];
@@ -13,7 +19,7 @@ function createApplicationMenu() {
     template.push({
       label: app.name,
       submenu: [
-        { label: `${app.name} 정보`, role: "about" },
+        { label: `${app.name} 정보`, click: openAboutDialog },
         { type: "separator" },
         { label: "서비스", role: "services" },
         { type: "separator" },
@@ -78,6 +84,12 @@ function createApplicationMenu() {
               { label: "모든 창을 앞으로", role: "front" },
             ]
           : []),
+      ],
+    },
+    {
+      label: "도움말",
+      submenu: [
+        { label: "Hinana Voice 정보", click: openAboutDialog },
       ],
     },
   );
@@ -239,6 +251,16 @@ app.whenReady().then(() => {
   createApplicationMenu();
   ipcMain.handle("settings:get", () => loadSettings());
   ipcMain.handle("settings:save", (_event, settings) => saveSettings(settings));
+  ipcMain.handle("app:info", () => ({
+    name: app.name,
+    version: app.getVersion(),
+    author: "비나래",
+    github: GITHUB_URL,
+  }));
+  ipcMain.handle("external:open", (_event, url) => {
+    if (url !== GITHUB_URL) throw new Error("허용되지 않은 외부 주소입니다.");
+    return shell.openExternal(url);
+  });
   ipcMain.handle("backend:probe", async (_event, settings) => {
     const result = await runBackend({ action: "probe", voicepeak: settings.voicepeak });
     return result;

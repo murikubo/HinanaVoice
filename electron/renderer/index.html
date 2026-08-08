@@ -19,6 +19,11 @@
         </div>
         <div class="top-actions">
           <span id="status" class="status">연결 준비 중…</span>
+          <button id="aboutButton" class="icon-button" type="button" aria-label="프로그램 정보 열기">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M11 10h2v7h-2v-7Zm1-7a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 16a7 7 0 1 1 0-14 7 7 0 0 1 0 14Zm-1-12h2v2h-2V7Z"/>
+            </svg>
+          </button>
           <button id="settingsButton" class="icon-button" type="button" aria-label="설정 열기">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Zm8-3.5c0-.5-.04-1-.13-1.47l2.02-1.58-2-3.46-2.5 1A8.2 8.2 0 0 0 14.87 5L14.5 2h-5l-.38 3a8.2 8.2 0 0 0-2.5 1.48l-2.5-1-2 3.46 2.02 1.58A8.1 8.1 0 0 0 4 12c0 .5.04 1 .13 1.47L2.1 15.05l2 3.46 2.5-1A8.2 8.2 0 0 0 9.13 19l.37 3h5l.38-3a8.2 8.2 0 0 0 2.5-1.48l2.5 1 2-3.46-2.02-1.58c.09-.48.13-.97.13-1.48Z"/>
@@ -96,6 +101,31 @@
           <button class="primary-button" value="save" type="submit">저장</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="aboutDialog" class="about-dialog" aria-labelledby="aboutTitle">
+      <div class="about-card">
+        <button id="closeAbout" class="about-close" type="button" aria-label="정보 창 닫기">×</button>
+        <img class="about-icon" src="../../icon.png" alt="Hinana Voice 아이콘" />
+        <h2 id="aboutTitle">HINANA VOICE</h2>
+        <p class="about-tagline">GPT와 VOICEPEAK으로 대화하는 데스크톱 음성 스튜디오</p>
+
+        <dl class="about-details">
+          <div>
+            <dt>프로그램 명</dt>
+            <dd id="aboutProgramName">HINANA VOICE</dd>
+          </div>
+          <div>
+            <dt>개발/제작자</dt>
+            <dd><strong id="aboutAuthor">비나래</strong><button id="githubLink" class="about-link" type="button">GitHub</button></dd>
+          </div>
+          <div>
+            <dt>버전</dt>
+            <dd id="aboutVersion">Ver. 0.6.0</dd>
+          </div>
+        </dl>
+        <p class="about-copyright">© 2026 비나래</p>
+      </div>
     </dialog>
 
     <script src="app.js"></script>

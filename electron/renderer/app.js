@@ -8,11 +8,22 @@ const status = $("#status");
 const settingsDialog = $("#settingsDialog");
 const settingsForm = $("#settingsForm");
 const settingsMessage = $("#settingsMessage");
+const aboutDialog = $("#aboutDialog");
 
 let settings;
 let busy = false;
 let currentAssistantMeta = null;
 let currentAssistantBubble = null;
+let currentAssistantArticle = null;
+let currentAssistantTranslation = null;
+
+async function openAboutDialog() {
+  const info = await window.hinana.getAppInfo();
+  $("#aboutProgramName").textContent = info.name.toUpperCase();
+  $("#aboutAuthor").textContent = info.author;
+  $("#aboutVersion").textContent = `Ver. ${info.version}`;
+  aboutDialog.showModal();
+}
 
 function appendMessage(role, text, meta = "") {
   const article = document.createElement("article");
@@ -30,7 +41,10 @@ function appendMessage(role, text, meta = "") {
   }
   messages.appendChild(article);
   messages.scrollTop = messages.scrollHeight;
-  if (role === "assistant") currentAssistantBubble = bubble;
+  if (role === "assistant") {
+    currentAssistantArticle = article;
+    currentAssistantBubble = bubble;
+  }
   return article;
 }
 
@@ -39,6 +53,19 @@ function appendAssistantDelta(delta) {
     appendMessage("assistant", "", "답변을 만들고 있어요…");
   }
   currentAssistantBubble.textContent += delta;
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function setAssistantTranslation(text, pending = false) {
+  if (!currentAssistantArticle) return;
+  if (!currentAssistantTranslation) {
+    currentAssistantTranslation = document.createElement("p");
+    currentAssistantTranslation.className = "translation";
+    const meta = currentAssistantArticle.querySelector(".message-meta");
+    currentAssistantArticle.insertBefore(currentAssistantTranslation, meta);
+  }
+  currentAssistantTranslation.classList.toggle("pending", pending);
+  currentAssistantTranslation.textContent = text;
   messages.scrollTop = messages.scrollHeight;
 }
 
@@ -138,6 +165,8 @@ composer.addEventListener("submit", async (event) => {
   status.textContent = "전송 중…";
   currentAssistantMeta = null;
   currentAssistantBubble = null;
+  currentAssistantArticle = null;
+  currentAssistantTranslation = null;
 
   try {
     await window.hinana.sendMessage({
@@ -163,6 +192,13 @@ messageInput.addEventListener("keydown", (event) => {
 });
 
 $("#settingsButton").addEventListener("click", () => settingsDialog.showModal());
+$("#aboutButton").addEventListener("click", openAboutDialog);
+$("#closeAbout").addEventListener("click", () => aboutDialog.close());
+$("#githubLink").addEventListener("click", async () => {
+  const info = await window.hinana.getAppInfo();
+  await window.hinana.openExternal(info.github);
+});
+window.hinana.onOpenAbout(openAboutDialog);
 $("#closeSettings").addEventListener("click", () => settingsDialog.close());
 $("#probeButton").addEventListener("click", probe);
 
@@ -183,6 +219,12 @@ window.hinana.onBackendEvent((payload) => {
   } else if (payload.event === "answer_done") {
     if (!currentAssistantBubble) appendMessage("assistant", payload.text);
     else currentAssistantBubble.textContent = payload.text;
+    setAssistantTranslation("한국어 번역 중…", true);
+  } else if (payload.event === "translation") {
+    setAssistantTranslation(payload.text);
+  } else if (payload.event === "translation_error") {
+    if (currentAssistantTranslation) currentAssistantTranslation.remove();
+    currentAssistantTranslation = null;
   } else if (payload.event === "answer") {
     appendMessage("assistant", payload.text, "VOICEPEAK 음성을 준비하고 있어요…");
   } else if (payload.event === "done") {

@@ -43,6 +43,12 @@ SYSTEM_PROMPT = """
 Markdown、箇条書き、装飾用の記号は使わないでください。
 """.strip()
 
+TRANSLATION_PROMPT = """
+다음 일본어 대화 응답을 자연스러운 한국어로 번역하세요.
+말투와 감정은 살리되 의미를 임의로 추가하거나 설명하지 마세요.
+번역문만 출력하고, 따옴표나 Markdown은 사용하지 마세요.
+""".strip()
+
 
 def configure_console() -> None:
     # 리디렉션된 Windows 콘솔에서도 한글/일본어가 깨지지 않게 합니다.
@@ -205,6 +211,21 @@ def stream_llm_text(client: OpenAI, model: str, user_text: str) -> Iterator[str]
         close = getattr(stream, "close", None)
         if callable(close):
             close()
+
+
+def translate_to_korean(client: OpenAI, model: str, japanese_text: str) -> str:
+    """일본어 응답을 화면에 병기할 자연스러운 한국어로 번역합니다."""
+    response = client.responses.create(
+        model=model,
+        instructions=TRANSLATION_PROMPT,
+        input=japanese_text,
+        reasoning={"effort": "low"},
+        text={"verbosity": "low"},
+    )
+    translation = response.output_text.strip()
+    if not translation:
+        raise RuntimeError("한국어 번역이 비어 있습니다.")
+    return translation
 
 
 def make_voicepeak_wav(

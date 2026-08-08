@@ -23,6 +23,7 @@ from hinana_voice import (
     play_to_device,
     punctuate_for_speech,
     stream_llm_text,
+    translate_to_korean,
 )
 from platform_support import (
     audio_api_priority,
@@ -224,6 +225,7 @@ def chat(command: dict[str, Any]) -> None:
 
         synth_thread = Thread(target=synthesize_worker, name="voicepeak-synth")
         play_thread = Thread(target=playback_worker, name="voicepeak-playback")
+        translation_thread: Thread | None = None
         synth_thread.start()
         play_thread.start()
 
@@ -250,6 +252,21 @@ def chat(command: dict[str, Any]) -> None:
             if not answer:
                 raise RuntimeError("모델이 빈 답변을 반환했습니다.")
             emit("answer_done", text=answer)
+
+            def translation_worker() -> None:
+                try:
+                    translation = translate_to_korean(
+                        OpenAI(api_key=api_key), DEFAULT_MODEL, answer
+                    )
+                    emit("translation", text=translation)
+                except BaseException as exc:
+                    emit("translation_error", message=str(exc))
+
+            translation_thread = Thread(
+                target=translation_worker,
+                name="korean-translation",
+            )
+            translation_thread.start()
         except BaseException as exc:
             stream_error = exc
             stop_event.set()
@@ -258,6 +275,8 @@ def chat(command: dict[str, Any]) -> None:
 
         synth_thread.join()
         play_thread.join()
+        if translation_thread is not None:
+            translation_thread.join()
 
         if stream_error is not None:
             raise stream_error
