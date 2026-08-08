@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.env
+build/
+dist/
+*.spec
+node_modules/
+release/
+release-*/
+artifacts/
+backend-bin/*
+!backend-bin/.gitkeep
+.venv/

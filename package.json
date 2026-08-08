@@ -1,0 +1,66 @@
+{
+  "name": "hinana-voice",
+  "version": "0.5.0",
+  "private": true,
+  "description": "GPT, VOICEPEAK, VB-CABLE 및 Vocoflex용 음성 대화 프로그램",
+  "author": "비나래",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "setup": "node scripts/setup-dev.js",
+    "build:backend": "node scripts/build-backend.js",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build:backend && electron-builder"
+  },
+  "devDependencies": {
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.hinanavoice.app",
+    "productName": "Hinana Voice",
+    "copyright": "비나래",
+    "icon": "icon.png",
+    "files": [
+      "electron/**/*",
+      "icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "hinana_bridge.py",
+        "to": "backend/hinana_bridge.py"
+      },
+      {
+        "from": "hinana_voice.py",
+        "to": "backend/hinana_voice.py"
+      },
+      {
+        "from": "requirements.txt",
+        "to": "backend/requirements.txt"
+      },
+      {
+        "from": "platform_support.py",
+        "to": "backend/platform_support.py"
+      },
+      {
+        "from": "backend-bin",
+        "to": "backend/bin",
+        "filter": [
+          "hinana-backend*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "icon.png",
+      "target": "portable"
+    },
+    "mac": {
+      "icon": "icon.png",
+      "target": "dmg",
+      "category": "public.app-category.entertainment",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    }
+  }
+}

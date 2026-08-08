@@ -1,0 +1,37 @@
+name: Build desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: hinana-voice-windows
+            package: dist/*.exe
+          - os: macos-14
+            artifact: hinana-voice-macos
+            package: dist/*.dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm ci
+      - run: npm run setup
+      - run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.package }}
+          if-no-files-found: error
