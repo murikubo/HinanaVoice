@@ -72,7 +72,7 @@ function setAssistantTranslation(text, pending = false) {
 function setBusy(value) {
   busy = value;
   sendButton.disabled = value;
-  messageInput.disabled = value;
+  sendButton.querySelector('span').textContent = value ? '응답 중' : '전송';
   if (!value) messageInput.focus();
 }
 
@@ -91,10 +91,14 @@ function formValues() {
     deviceApi: selectedDevice?.dataset.api || "",
     speed: Number($("#speed").value),
     pitch: Number($("#pitch").value),
+    autoLaunchVocoflex: $('#autoLaunchVocoflex').checked,
+    vocoflexPath: $('#vocoflexPath').value.trim(),
   };
 }
 
 function fillSettings(value) {
+  $('#autoLaunchVocoflex').checked = value.autoLaunchVocoflex === true;
+  $('#vocoflexPath').value = value.vocoflexPath || '';
   $("#voicepeak").value = value.voicepeak;
   $("#speed").value = value.speed;
   $("#pitch").value = value.pitch;
@@ -151,7 +155,13 @@ async function probe() {
 composer.addEventListener("submit", async (event) => {
   event.preventDefault();
   const text = messageInput.value.trim();
-  if (!text || busy) return;
+  if (!text || busy || !settings) return;
+  if (!settings.hasEnvironmentKey && !$('#apiKey').value.trim()) {
+    settingsDialog.showModal();
+    settingsMessage.textContent = '대화를 시작하려면 API 키를 입력해 주세요.';
+    $('#apiKey').focus();
+    return;
+  }
   if (settings.device === null) {
     settingsDialog.showModal();
     settingsMessage.textContent = "먼저 오디오 출력 장치를 선택해 주세요.";
@@ -185,7 +195,7 @@ composer.addEventListener("submit", async (event) => {
 
 messageInput.addEventListener("input", resizeInput);
 messageInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
     event.preventDefault();
     composer.requestSubmit();
   }
@@ -204,11 +214,46 @@ $("#probeButton").addEventListener("click", probe);
 
 settingsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  settings = await window.hinana.saveSettings(formValues());
+  try {
+  settings = { ...settings, ...await window.hinana.saveSettings(formValues()) };
   settingsDialog.close();
   status.textContent = "설정 저장됨";
   messageInput.focus();
+  await refreshVocoflex(settings.autoLaunchVocoflex);
+  } catch (error) {
+    settingsMessage.textContent = `설정을 저장하지 못했습니다: ${error.message}`;
+  }
 });
+
+let checkingVocoflex = false;
+async function refreshVocoflex(launch = false) {
+  if (checkingVocoflex) return;
+  checkingVocoflex = true;
+  const button = $('#vocoflexLaunch');
+  button.disabled = true;
+  try {
+    const result = await (launch ? window.hinana.launchVocoflex() : window.hinana.vocoflexStatus());
+    $('#vocoflexStatus').textContent = result.running ? '● Vocoflex 실행 중' : result.error ? 'Vocoflex 확인 필요' : '○ Vocoflex 실행하기';
+    button.classList.toggle('connected', result.running === true);
+    button.title = result.error || (result.running ? '실행 중 · 클릭하여 다시 확인' : '클릭하여 Vocoflex 실행');
+    button.dataset.running = String(result.running === true);
+    if (launch && result.error) {
+      settingsDialog.showModal();
+      settingsMessage.textContent = result.error;
+    }
+  } catch (error) {
+    $('#vocoflexStatus').textContent = 'Vocoflex 상태 확인 실패';
+    button.title = error.message;
+  } finally { checkingVocoflex = false; button.disabled = false; }
+}
+$('#vocoflexLaunch').addEventListener('click', () => refreshVocoflex($('#vocoflexLaunch').dataset.running !== 'true'));
+$('#browseVocoflex').addEventListener('click', async () => {
+  try {
+    const selected = await window.hinana.browseVocoflex();
+    if (selected) $('#vocoflexPath').value = selected;
+  } catch (error) { settingsMessage.textContent = error.message; }
+});
+setInterval(() => { if (!document.hidden) void refreshVocoflex(); }, 15000);
 
 window.hinana.onBackendEvent((payload) => {
   if (payload.event === "status") {
@@ -223,8 +268,7 @@ window.hinana.onBackendEvent((payload) => {
   } else if (payload.event === "translation") {
     setAssistantTranslation(payload.text);
   } else if (payload.event === "translation_error") {
-    if (currentAssistantTranslation) currentAssistantTranslation.remove();
-    currentAssistantTranslation = null;
+    setAssistantTranslation('한국어 번역을 불러오지 못했어요. 일본어 음성은 계속 재생됩니다.');
   } else if (payload.event === "answer") {
     appendMessage("assistant", payload.text, "VOICEPEAK 음성을 준비하고 있어요…");
   } else if (payload.event === "done") {
@@ -239,10 +283,17 @@ window.hinana.onBackendEvent((payload) => {
 });
 
 (async () => {
+  sendButton.disabled = true;
+  try {
   settings = await window.hinana.getSettings();
   fillSettings(settings);
+  void refreshVocoflex();
   await probe();
   settings = { ...settings, ...formValues() };
   if (!settings.hasEnvironmentKey) settingsDialog.showModal();
   messageInput.focus();
+  } catch (error) {
+    status.textContent = '초기화 실패';
+    appendMessage('error', error.message);
+  } finally { sendButton.disabled = !settings; }
 })();

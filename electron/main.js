@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require("electron");
+const vocoflex = require('./vocoflex');
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
@@ -141,6 +142,8 @@ function defaults() {
     deviceApi: "",
     speed: 95,
     pitch: 0,
+    autoLaunchVocoflex: false,
+    vocoflexPath: '',
   };
 }
 
@@ -162,6 +165,8 @@ function saveSettings(value) {
     deviceApi: String(value.deviceApi || ""),
     speed: Number(value.speed || 95),
     pitch: Number(value.pitch || 0),
+    autoLaunchVocoflex: value.autoLaunchVocoflex === true,
+    vocoflexPath: String(value.vocoflexPath || ''),
   };
   fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
   fs.writeFileSync(settingsPath(), JSON.stringify(safe, null, 2), "utf8");
@@ -248,6 +253,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  ipcMain.handle('vocoflex:status', () => vocoflex.inspect(loadSettings().vocoflexPath));
+  ipcMain.handle('vocoflex:launch', () => vocoflex.ensureRunning(loadSettings().vocoflexPath));
+  ipcMain.handle('vocoflex:browse', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Vocoflex 실행 파일 선택', properties: ['openFile'],
+      filters: [{ name: 'Vocoflex', extensions: process.platform === 'darwin' ? ['app'] : ['exe'] }],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
   createApplicationMenu();
   ipcMain.handle("settings:get", () => loadSettings());
   ipcMain.handle("settings:save", (_event, settings) => saveSettings(settings));
@@ -281,6 +295,8 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+  const startupSettings = loadSettings();
+  if (startupSettings.autoLaunchVocoflex) void vocoflex.ensureRunning(startupSettings.vocoflexPath);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

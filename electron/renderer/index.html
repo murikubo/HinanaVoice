@@ -14,7 +14,7 @@
     <main class="app-shell">
       <header class="topbar">
         <div class="brand">
-          <span class="presence" aria-hidden="true"></span>
+          <img class="brand-icon" src="../../icon.png" alt="" />
           <span>Hinana Voice</span>
         </div>
         <div class="top-actions">
@@ -32,7 +32,11 @@
         </div>
       </header>
 
-      <section id="messages" class="messages" aria-live="polite">
+      <aside class="connection-bar" aria-label="음성 연결 상태">
+        <div><span class="eyebrow">VOICE COMPANION</span><strong>일본어로 듣고, 한국어로 이해하세요.</strong></div>
+        <button id="vocoflexLaunch" type="button" class="connection-chip"><span id="vocoflexStatus" role="status">Vocoflex 확인 중…</span></button>
+      </aside>
+      <section id="messages" class="messages" aria-live="polite" aria-label="대화">
         <article class="message assistant">
           <div class="bubble">야하~ 프로듀서, 히나나예요! 뭐부터 시작해볼까요?</div>
           <div class="message-meta">VOICEPEAK · Koharu Rikka</div>
@@ -44,7 +48,7 @@
           id="messageInput"
           rows="1"
           maxlength="10000"
-          placeholder="메시지 보내기…"
+          placeholder="한국어로 편하게 이야기해 주세요…"
           aria-label="메시지 입력"
         ></textarea>
         <button id="sendButton" class="send-button" type="submit">
@@ -53,6 +57,7 @@
           </svg>
           <span>전송</span>
         </button>
+        <div class="composer-hint">Enter로 전송 · Shift + Enter로 줄바꿈 · 응답 중에도 다음 메시지를 작성할 수 있어요</div>
       </form>
     </main>
 
@@ -96,6 +101,13 @@
         </div>
         <div id="settingsMessage" class="settings-message"></div>
         <div id="routeHelp" class="route-help"></div>
+        <fieldset class="vocoflex-settings">
+          <legend>Vocoflex 연결</legend>
+          <label class="check-label"><input id="autoLaunchVocoflex" type="checkbox" /><span>Hinana Voice를 켤 때 Vocoflex도 자동 실행</span></label>
+          <p class="setting-note">이미 실행 중이면 다시 열지 않습니다. 실행 여부만 확인하며 오디오 연결 상태는 Vocoflex에서 확인해 주세요.</p>
+          <label><span>Vocoflex 경로 (비우면 자동 탐색)</span><input id="vocoflexPath" type="text" placeholder="설치 경로 자동 탐색" /></label>
+          <button id="browseVocoflex" class="secondary-button" type="button">실행 파일 선택</button>
+        </fieldset>
         <div class="dialog-actions">
           <button id="probeButton" class="secondary-button" type="button">장치 새로고침</button>
           <button class="primary-button" value="save" type="submit">저장</button>

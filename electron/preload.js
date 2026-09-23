@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("hinana", {
   getSettings: () => ipcRenderer.invoke("settings:get"),
+  vocoflexStatus: () => ipcRenderer.invoke('vocoflex:status'),
+  launchVocoflex: () => ipcRenderer.invoke('vocoflex:launch'),
+  browseVocoflex: () => ipcRenderer.invoke('vocoflex:browse'),
   getAppInfo: () => ipcRenderer.invoke("app:info"),
   saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),
   openExternal: (url) => ipcRenderer.invoke("external:open", url),

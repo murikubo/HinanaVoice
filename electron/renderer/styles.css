@@ -20,7 +20,7 @@ button { cursor: pointer; }
 .app-shell {
   height: 100vh;
   display: grid;
-  grid-template-rows: 58px 1fr auto;
+  grid-template-rows: 68px auto 1fr auto;
   background: #fff;
 }
 
@@ -35,6 +35,20 @@ button { cursor: pointer; }
 }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; }
+.brand-icon { width: 36px; height: 36px; border-radius: 12px; object-fit: cover; }
+.connection-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 32px; background: #f6f8fc; border-bottom: 1px solid #e6ecef; }
+.connection-bar strong { display: block; font-size: 15px; font-weight: 600; margin-top: 6px; color: #445367; }
+.eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .16em; color: #7987a0; }
+.connection-chip { border: 1px solid #d8dfeb; border-radius: 24px; padding: 10px 16px; background: white; color: #5a6375; font-size: 12px; white-space: nowrap; }
+.connection-chip.connected { background: #eaf8f1; color: #28764f; border-color: #c8e8d8; }
+.composer-hint { grid-column: 1 / -1; color: #778492; font-size: 11px; padding-left: 14px; }
+.vocoflex-settings { border: 1px solid #dce4ed; border-radius: 16px; margin: 20px 0 0; padding: 18px; }
+.vocoflex-settings legend { color: #344b64; font-weight: 700; padding: 0 6px; }
+.settings-dialog .check-label { display: flex; align-items: center; gap: 10px; }
+.settings-dialog .check-label input { width: 18px; height: 18px; accent-color: #249bef; }
+.setting-note { font-size: 12px; line-height: 1.6; color: #677584; }
+button:focus-visible { outline: 3px solid #85baff; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; } }
 .presence { width: 9px; height: 9px; border-radius: 50%; background: #40c783; box-shadow: 0 0 0 4px #e9f9f1; }
 .top-actions { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 12px; }
 .status { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
