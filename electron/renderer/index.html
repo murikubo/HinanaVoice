@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' data:"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Hinana Voice</title>
@@ -18,6 +18,8 @@
           <span>Hinana Voice</span>
         </div>
         <div class="top-actions">
+          <button id="voiceStudioButton" class="secondary-button" type="button">음성 프리셋</button>
+          <button id="liveVoiceButton" class="secondary-button" type="button">Vocoflex 자동 설정</button>
           <span id="status" class="status">연결 준비 중…</span>
           <button id="aboutButton" class="icon-button" type="button" aria-label="프로그램 정보 열기">
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -115,6 +117,55 @@
       </form>
     </dialog>
 
+    <dialog id="voiceDialog" class="settings-dialog voice-dialog" aria-labelledby="voiceTitle">
+      <div class="dialog-heading"><div><h2 id="voiceTitle">내 캐릭터 목소리</h2><p>참고 음색과 음높이 보정을 함께 저장하세요.</p></div>
+        <button id="closeVoice" class="icon-button" type="button" aria-label="음성 프리셋 닫기">×</button></div>
+      <div id="voiceNotice" class="route-help">참고 음성은 이 Mac에서만 처리합니다. Vocoflex가 설치·활성화되어 있어야 합니다.</div>
+      <p id="voiceMessage" class="settings-message" role="status" aria-live="polite"></p>
+      <section class="voice-section"><h3>저장된 목소리</h3>
+        <label><span>프리셋</span><select id="voicePreset"><option value="">저장된 프리셋 없음</option></select></label>
+        <p id="voicePresetInfo" class="setting-note"></p>
+        <div class="voice-actions"><button id="voiceListenSaved" class="secondary-button" type="button">미리 듣기</button>
+          <button id="voiceApply" class="primary-button" type="button">대화에 적용</button>
+          <button id="voiceDisable" class="secondary-button" type="button">프리셋 해제</button></div>
+        <p class="setting-note">적용하면 화자·속도·기본 피치도 함께 불러옵니다. 변환된 음성의 출력은 실제 헤드폰이나 스피커를 선택하세요.</p>
+      </section>
+      <section class="voice-section"><h3>새 목소리 만들기</h3>
+        <div class="voice-actions"><button id="voiceSelect" class="secondary-button" type="button">1. 참고 음성 선택</button><span id="voiceReferenceName" class="setting-note">선택된 파일 없음</span></div>
+        <p class="setting-note">배경음 없이 한 사람이 말하는 10~20초 구간을 권장합니다. 긴 파일도 분석할 수 있어요.</p>
+        <div class="voice-actions"><button id="voiceRegister" class="secondary-button" type="button" disabled>2. 음색 등록</button>
+          <button id="voiceAnalyze" class="secondary-button" type="button" disabled>3. 음높이 분석</button></div>
+        <p class="setting-note">등록 창 오른쪽 Import 버튼으로 선택한 파일을 가져온 뒤 ‘등록 저장’을 누르세요.</p>
+        <p id="voiceAnalysis" class="voice-analysis"></p>
+        <label><span>Vocoflex 음높이 보정 (반음)</span><input id="voiceShift" type="number" min="-12" max="12" step="0.5" value="8.5" /></label>
+        <label><span>테스트 문장 (일본어)</span><textarea id="voiceTestText" rows="3" maxlength="400">こんにちは。今日はどんな一日でしたか。あなたとお話しできて、うれしいです。少し休んでから、一緒に続きを始めましょう。</textarea></label>
+        <button id="voicePreview" class="secondary-button" type="button" disabled>4. 보정된 목소리 미리 듣기</button>
+        <div class="voice-audio"><label><span>VOICEPEAK 원음</span><audio id="voiceOriginalAudio" controls preload="none"></audio></label>
+          <label><span>변환한 목소리</span><audio id="voicePreviewAudio" controls preload="none"></audio></label></div>
+        <label><span>프리셋 이름</span><input id="voiceName" type="text" maxlength="60" placeholder="예: 히나나" /></label>
+        <button id="voiceSave" class="primary-button" type="button" disabled>5. 프리셋 저장</button>
+      </section>
+    </dialog>
+
+    <dialog id="liveDialog" class="settings-dialog voice-dialog" aria-labelledby="liveTitle">
+      <div class="dialog-heading"><div><h2 id="liveTitle">Vocoflex 자동 설정</h2><p>평소 쓰는 Vocoflex 자체를 참고 목소리에 맞춥니다.</p></div>
+        <button id="closeLive" class="icon-button" type="button" aria-label="실시간 창 닫기">×</button></div>
+      <div class="route-help">8초 발성 분석 → 히나나 음색·피치를 Vocoflex에 저장 → Vocoflex 재실행</div>
+      <label><span>사용 방식</span><select id="liveMode"><option value="standalone">Vocoflex 자체에 자동 설정 (적용 후 독립 사용)</option><option value="monitor">Hinana Voice 안에서만 실시간 변환</option></select></label>
+      <label><span>맞출 목소리</span><select id="liveProfile"></select></label>
+      <label><span>입력 마이크 또는 가상 케이블</span><select id="liveInput"></select></label>
+      <label><span>듣는 장치</span><select id="liveOutput"></select></label>
+      <p class="setting-note">마이크 입력은 헤드폰 사용을 권장합니다. 가상 케이블은 다른 앱의 출력을 해당 케이블로 보내세요. 처음 8초 동안 평소 목소리로 말하거나 입력을 재생해 주세요.</p>
+      <label><span>입력 레벨</span><meter id="liveMeter" min="0" max="1" value="0" aria-label="입력 레벨"></meter></label>
+      <p id="liveMessage" class="settings-message" role="status" aria-live="polite">시작 버튼을 누르면 입력을 받습니다.</p>
+      <p id="liveMatchInfo" class="voice-analysis"></p>
+      <p id="liveHealth" class="setting-note"></p>
+      <div class="voice-actions"><button id="liveRefresh" class="secondary-button" type="button">장치 새로 고침</button>
+        <button id="liveStart" class="primary-button" type="button">8초 분석 후 Vocoflex에 적용</button>
+        <button id="liveStop" class="secondary-button" type="button" disabled>중지</button></div>
+      <p class="setting-note">Vocoflex 자체 설정 모드는 기존 설정을 백업하고 Vocoflex를 재실행합니다. 적용 후에는 Hinana Voice를 닫아도 Vocoflex에서 평소처럼 말하면 변환됩니다. 화자가 바뀌면 다시 분석하세요. 말투·억양은 입력을 따릅니다.</p>
+    </dialog>
+
     <dialog id="aboutDialog" class="about-dialog" aria-labelledby="aboutTitle">
       <div class="about-card">
         <button id="closeAbout" class="about-close" type="button" aria-label="정보 창 닫기">×</button>
@@ -141,5 +192,7 @@
     </dialog>
 
     <script src="app.js"></script>
+    <script src="voice-studio.js"></script>
+    <script src="live-voice.js"></script>
   </body>
 </html>

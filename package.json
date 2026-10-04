@@ -1,6 +1,6 @@
 {
   "name": "hinana-voice",
-  "version": "0.8.0",
+  "version": "0.11.0",
   "private": true,
   "description": "GPT, VOICEPEAK, VB-CABLE 및 Vocoflex용 음성 대화 프로그램",
   "author": "비나래",
@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "setup": "node scripts/setup-dev.js",
+    "build:voice-studio": "node scripts/build-vocoflex-lab.js",
     "build:backend": "node scripts/build-backend.js",
     "pack": "electron-builder --dir",
     "dist": "npm run build:backend && electron-builder"
@@ -44,10 +45,21 @@
         "to": "backend/platform_support.py"
       },
       {
+        "from": "voice_studio.py",
+        "to": "backend/voice_studio.py"
+      },
+      {
+        "from": "live_voice.py",
+        "to": "backend/live_voice.py"
+      },
+      { "from": "standalone_vocoflex.py", "to": "backend/standalone_vocoflex.py" },
+      {
         "from": "backend-bin",
         "to": "backend/bin",
         "filter": [
-          "hinana-backend*"
+          "hinana-backend*",
+          "vocoflex-host",
+          "VocoflexHost.app/**/*"
         ]
       }
     ],
@@ -60,6 +72,7 @@
       "target": "dmg",
       "category": "public.app-category.entertainment",
       "hardenedRuntime": true,
+      "extendInfo": { "NSMicrophoneUsageDescription": "선택한 마이크 또는 가상 케이블 음성을 분석하고 Vocoflex로 실시간 변환합니다." },
       "gatekeeperAssess": false
     }
   }

@@ -1,3 +1,4 @@
 openai>=1.66.0
 sounddevice>=0.5.1
 soundfile>=0.13.1
+praat-parselmouth==0.4.7

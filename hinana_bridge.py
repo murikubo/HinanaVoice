@@ -11,6 +11,9 @@ from typing import Any
 
 import sounddevice as sd
 from openai import OpenAI
+import voice_studio
+import live_voice
+import standalone_vocoflex
 
 from hinana_voice import (
     DEFAULT_MODEL,
@@ -89,6 +92,7 @@ def probe(command: dict[str, Any]) -> None:
                 "api": api,
                 "channels": int(device["max_output_channels"]),
                 "virtual": is_virtual_output(str(device["name"])),
+                "default": index == sd.default.device[1],
                 "priority": audio_api_priority(api),
             }
         )
@@ -113,6 +117,11 @@ def resolve_device(command: dict[str, Any]) -> int:
     requested_id = command.get("device")
     host_apis = sd.query_hostapis()
     devices = output_devices()
+    if command.get("voiceProfile"):
+        devices = [(index, device) for index, device in devices
+                   if not is_virtual_output(str(device["name"]))]
+        if not devices:
+            raise RuntimeError("실제 오디오 출력 장치를 찾지 못했습니다. 헤드폰이나 스피커를 연결해 주세요.")
 
     if requested_name:
         matches = [
@@ -132,6 +141,10 @@ def resolve_device(command: dict[str, Any]) -> int:
         numeric_id = int(requested_id)
         if any(index == numeric_id for index, _ in devices):
             return numeric_id
+
+    if command.get("voiceProfile"):
+        default_output = sd.default.device[1]
+        return next((index for index, _ in devices if index == default_output), devices[0][0])
 
     virtual = [
         (index, device)
@@ -172,6 +185,11 @@ def chat(command: dict[str, Any]) -> None:
             installed_narrators[0] if installed_narrators else narrator,
         )
     device = resolve_device(command)
+    voice_profile = command.get("voiceProfile")
+    if voice_profile:
+        device_info = sd.query_devices(device)
+        if is_virtual_output(str(device_info["name"])):
+            raise RuntimeError("음성 프리셋은 변환을 마친 음성을 재생합니다. 설정에서 실제 헤드폰이나 스피커를 선택해 주세요.")
     speed = int(command.get("speed", 95))
     pitch = int(command.get("pitch", 0))
 
@@ -198,6 +216,11 @@ def chat(command: dict[str, Any]) -> None:
                     make_voicepeak_wav(
                         voicepeak, narrator, sentence, wav_path, speed, pitch
                     )
+                    if voice_profile:
+                        emit("status", message=f"Vocoflex 문장 {index} 변환 중…")
+                        converted = output_dir / f"converted_{index:03d}.wav"
+                        voice_studio.convert(wav_path, converted, voice_profile)
+                        wav_path = converted
                     playback_queue.put((index, wav_path))
             except BaseException as exc:
                 worker_errors.put(exc)
@@ -297,6 +320,16 @@ def main() -> int:
         action = command.get("action")
         if action == "probe":
             probe(command)
+        elif action == "live_devices":
+            emit("live_devices", **live_voice.devices())
+        elif action == "live_start":
+            live_voice.run(command, emit)
+        elif action == "standalone_apply":
+            emit("standalone_applied", **standalone_vocoflex.apply(command))
+        elif action == "voice_analyze":
+            emit("voice_analysis", **voice_studio.analyze(command))
+        elif action == "voice_preview":
+            emit("voice_preview", **voice_studio.preview(command))
         elif action == "chat":
             chat(command)
         else:

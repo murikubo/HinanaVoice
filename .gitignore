@@ -11,3 +11,4 @@ artifacts/
 backend-bin/*
 !backend-bin/.gitkeep
 .venv/
+.DS_Store

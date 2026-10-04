@@ -125,11 +125,12 @@ async function probe() {
     const desiredName = device.dataset.selectedName || settings.deviceName || "";
     const desiredApi = device.dataset.selectedApi || settings.deviceApi || "";
     const virtualDevices = result.devices.filter((item) => item.virtual);
-    const shownDevices = virtualDevices.length ? virtualDevices : result.devices;
+    const shownDevices = result.voiceProfileActive ? result.devices.filter((item) => !item.virtual) : result.devices;
     const options = shownDevices.map((item) => {
-      const option = new Option(`${item.name} · ${item.api}`, String(item.id));
+      const option = new Option(`${item.name} · ${item.api}${item.virtual ? ' · 가상 출력' : ''}`, String(item.id));
       option.dataset.name = item.name;
       option.dataset.api = item.api;
+      option.dataset.virtual = String(Boolean(item.virtual));
       return option;
     });
     device.replaceChildren(...options);
@@ -137,13 +138,16 @@ async function probe() {
       (item) => item.name === desiredName && (!desiredApi || item.api === desiredApi),
     );
     const numericDevice = shownDevices.find((item) => item.id === desiredDevice);
-    const recommended = [...shownDevices].sort((a, b) => a.priority - b.priority)[0];
+    const recommended = (result.voiceProfileActive && shownDevices.find((item) => item.default))
+      || [...shownDevices].sort((a, b) => a.priority - b.priority)[0];
     device.value = String(namedDevice?.id ?? numericDevice?.id ?? recommended?.id ?? "");
     settingsMessage.className = result.voicepeakFound ? "settings-message" : "settings-message error";
     settingsMessage.textContent = result.voicepeakFound
       ? `${result.platformName} · 화자 ${result.narrators.length}개 · 가상 출력 ${virtualDevices.length}개`
       : result.voicepeakError;
-    $("#routeHelp").textContent = Object.values(result.route).join(" → ");
+    $("#routeHelp").textContent = result.voiceProfileActive
+      ? 'VOICEPEAK → 앱 내부 Vocoflex 변환 → 헤드폰·스피커'
+      : Object.values(result.route).join(" → ");
     status.textContent = result.voicepeakFound ? `${result.platformName} 준비됨` : "VOICEPEAK 설정 필요";
   } catch (error) {
     settingsMessage.className = "settings-message error";
@@ -290,7 +294,6 @@ window.hinana.onBackendEvent((payload) => {
   void refreshVocoflex();
   await probe();
   settings = { ...settings, ...formValues() };
-  if (!settings.hasEnvironmentKey) settingsDialog.showModal();
   messageInput.focus();
   } catch (error) {
     status.textContent = '초기화 실패';

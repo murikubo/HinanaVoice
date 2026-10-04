@@ -1,0 +1,4 @@
+# Optional analysis tools; not required by the main Electron app.
+numpy>=1.26
+soundfile>=0.13.1
+praat-parselmouth==0.4.7

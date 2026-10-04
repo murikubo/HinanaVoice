@@ -1,11 +1,16 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog, systemPreferences } = require("electron");
 const vocoflex = require('./vocoflex');
+const { VoiceStudio } = require('./voice-studio');
+const { LiveVoice } = require('./live-voice');
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
+const { spawn, execFile } = require("node:child_process");
+const runFile = require('node:util').promisify(execFile);
 
 let mainWindow;
 let activeChatProcess;
+let voiceStudio;
+let liveVoice;
 const GITHUB_URL = "https://github.com/murikubo/HinanaVoice";
 
 function openAboutDialog() {
@@ -179,6 +184,7 @@ function runBackend(command, onEvent) {
     const backend = backendInvocation();
     child = spawn(backend.command, backend.args, {
       windowsHide: true,
+      detached: command.action === 'live_start' && process.platform !== 'win32',
       env: { ...process.env, PYTHONUTF8: "1" },
     });
     let stdout = "";
@@ -253,6 +259,66 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const hostPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'backend', 'bin', 'VocoflexHost.app', 'Contents', 'MacOS', 'vocoflex-host')
+    : path.join(app.getAppPath(), 'backend-bin', 'VocoflexHost.app', 'Contents', 'MacOS', 'vocoflex-host');
+  voiceStudio = new VoiceStudio({ root: path.join(app.getPath('userData'), 'voice-presets'),
+    hostPath, runBackend,
+    seedDirectory: app.isPackaged ? null : path.join(app.getAppPath(), 'artifacts', 'vocoflex-lab', 'pitch-matched') });
+  voiceStudio.seed();
+  liveVoice = new LiveVoice({ studio: voiceStudio, runBackend,
+    applyStandalone: async (profile, calibration) => {
+      const configured = loadSettings().vocoflexPath;
+      if (!vocoflex.resolvePath(configured)) throw new Error('Vocoflex 앱 설치 경로를 확인해 주세요.');
+      await runFile(hostPath, ['--quit-standalone'], { timeout: 20000 });
+      let result, opened;
+      try {
+        result = await runBackend({ action: 'standalone_apply', statePath: profile.statePath,
+          settingsPath: path.join(app.getPath('appData'), 'Dreamtonics', 'Vocoflex', 'settings', 'settings.xml'),
+          name: profile.name, shift: calibration.shift, inputName: calibration.inputName, outputName: calibration.outputName });
+      } finally { opened = await vocoflex.ensureRunning(configured); }
+      if (!opened.running) throw new Error(`설정은 저장했습니다. Vocoflex를 직접 실행해 주세요. ${opened.error || ''}`);
+      return result;
+    },
+    emit: (event) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('live:event', event); } });
+  const studioWork = (work) => {
+    if (activeChatProcess) throw new Error('대화 음성 재생이 끝난 뒤 시도해 주세요.');
+    return work();
+  };
+  ipcMain.handle('voice:list', () => voiceStudio.list());
+  ipcMain.handle('live:devices', () => runBackend({ action: 'live_devices' }));
+  ipcMain.handle('live:status', () => liveVoice.status());
+  ipcMain.handle('live:start', (_event, request) => studioWork(async () => {
+    if (process.platform !== 'darwin') throw new Error('실시간 Vocoflex 변환은 macOS에서 지원합니다.');
+    if (!await systemPreferences.askForMediaAccess('microphone')) throw new Error('시스템 설정의 마이크 권한에서 Hinana Voice를 허용해 주세요.');
+    return liveVoice.start(request);
+  }));
+  ipcMain.handle('live:stop', () => liveVoice.stop());
+  ipcMain.handle('voice:select', async () => studioWork(async () => {
+    if (process.platform !== 'darwin') throw new Error('음성 프리셋은 현재 macOS에서 지원합니다.');
+    const result = await dialog.showOpenDialog(mainWindow, { title: '참고 음성 선택',
+      properties: ['openFile'], filters: [{ name: '음성', extensions: ['wav', 'flac', 'ogg'] }] });
+    return result.canceled ? null : voiceStudio.selectReference(result.filePaths[0], loadSettings());
+  }));
+  ipcMain.handle('voice:register', () => studioWork(() => voiceStudio.register()));
+  ipcMain.handle('voice:analyze', () => studioWork(() => voiceStudio.analyze()));
+  ipcMain.handle('voice:preview', (_event, request) => studioWork(() => voiceStudio.preview(request)));
+  ipcMain.handle('voice:save', (_event, request) => voiceStudio.save(request));
+  ipcMain.handle('voice:use', (_event, id) => studioWork(async () => {
+    if (id) {
+      const profile = voiceStudio.profile(id);
+      const current = loadSettings();
+      const probe = await runBackend({ action: 'probe', voicepeak: profile.voicepeak || current.voicepeak });
+      const outputs = probe.devices.filter((device) => !device.virtual);
+      const output = outputs.find((device) => device.name === current.deviceName && device.api === current.deviceApi)
+        || outputs.find((device) => device.default) || outputs[0];
+      if (!output) throw new Error('헤드폰이나 스피커를 연결한 뒤 다시 적용해 주세요.');
+      saveSettings({ ...current, narrator: profile.narrator, speed: profile.speed, pitch: profile.pitch,
+        device: output.id, deviceName: output.name, deviceApi: output.api,
+        voicepeak: profile.voicepeak || current.voicepeak });
+    }
+    return voiceStudio.use(id);
+  }));
   ipcMain.handle('vocoflex:status', () => vocoflex.inspect(loadSettings().vocoflexPath));
   ipcMain.handle('vocoflex:launch', () => vocoflex.ensureRunning(loadSettings().vocoflexPath));
   ipcMain.handle('vocoflex:browse', async () => {
@@ -264,7 +330,12 @@ app.whenReady().then(() => {
   });
   createApplicationMenu();
   ipcMain.handle("settings:get", () => loadSettings());
-  ipcMain.handle("settings:save", (_event, settings) => saveSettings(settings));
+  ipcMain.handle("settings:save", (_event, settings) => {
+    const previous = loadSettings();
+    const saved = saveSettings(settings);
+    if (['voicepeak', 'narrator', 'speed', 'pitch'].some((key) => previous[key] !== saved[key])) voiceStudio.use(null);
+    return saved;
+  });
   ipcMain.handle("app:info", () => ({
     name: app.name,
     version: app.getVersion(),
@@ -277,12 +348,18 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("backend:probe", async (_event, settings) => {
     const result = await runBackend({ action: "probe", voicepeak: settings.voicepeak });
-    return result;
+    return { ...result, voiceProfileActive: Boolean(voiceStudio.active()) };
   });
   ipcMain.handle("chat:send", async (event, request) => {
     if (activeChatProcess) throw new Error("이미 답변을 처리하고 있습니다.");
+    if (voiceStudio.busy) throw new Error('음성 프리셋 작업이 끝난 뒤 대화를 시작해 주세요.');
+    const profile = voiceStudio.active();
+    // Resolve the trusted saved preset in the main process, never a renderer path.
+    const voiceProfile = profile ? { statePath: profile.statePath, shift: profile.shift, hostPath } : null;
     const childPromise = runBackend(
-      { action: "chat", ...request },
+      { ...request, action: "chat", voiceProfile,
+        ...(profile ? { narrator: profile.narrator, speed: profile.speed, pitch: profile.pitch,
+          voicepeak: profile.voicepeak || loadSettings().voicepeak } : {}) },
       (payload) => event.sender.send("backend:event", payload),
     );
     activeChatProcess = childPromise.child;
@@ -303,9 +380,12 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  void liveVoice?.stop();
   if (process.platform !== "darwin") app.quit();
 });
 
 app.on("before-quit", () => {
+  void liveVoice?.stop();
+  voiceStudio?.stop();
   if (activeChatProcess && !activeChatProcess.killed) activeChatProcess.kill();
 });
