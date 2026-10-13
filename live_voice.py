@@ -21,12 +21,37 @@ BLOCK = 512
 
 def devices():
     apis = sd.query_hostapis()
+    all_devices = sd.query_devices()
+    default_input, default_output = sd.default.device
+    input_name = all_devices[default_input]['name'] if default_input >= 0 else None
+    output_name = all_devices[default_output]['name'] if default_output >= 0 else None
     rows = [{"id": i, "name": d["name"], "api": apis[d["hostapi"]]["name"],
              "inputs": d["max_input_channels"], "outputs": d["max_output_channels"],
              "virtual": is_virtual_output(d["name"]),
-             "defaultInput": i == sd.default.device[0], "defaultOutput": i == sd.default.device[1]}
-            for i, d in enumerate(sd.query_devices())]
+             "defaultInput": i == default_input or (d['max_input_channels'] > 0 and d['name'] == input_name),
+             "defaultOutput": i == default_output or (d['max_output_channels'] > 0 and d['name'] == output_name)}
+            for i, d in enumerate(all_devices)]
     return {"devices": rows}
+
+
+def audio_settings(device, direction):
+    """Negotiate channels and allow shared WASAPI's system format conversion."""
+    info = sd.query_devices(device)
+    maximum = int(info[f'max_{direction}_channels'])
+    if maximum < 1:
+        raise ValueError('선택한 장치가 ' + ('입력' if direction == 'input' else '출력') + '을 지원하지 않습니다.')
+    api = sd.query_hostapis(info['hostapi'])['name']
+    extra = sd.WasapiSettings(auto_convert=True) if api == 'Windows WASAPI' else None
+    check = sd.check_input_settings if direction == 'input' else sd.check_output_settings
+    failures = []
+    for channels in dict.fromkeys([min(2, maximum), 1, maximum]):
+        settings = dict(device=device, channels=channels, samplerate=RATE, dtype='float32', extra_settings=extra)
+        try:
+            check(**settings)
+            return settings
+        except sd.PortAudioError as error:
+            failures.append(f'{channels}ch: {error}')
+    raise RuntimeError(f"{info['name']} ({api})에서 오디오를 열 수 없습니다. 다른 장치 또는 Windows 공유 오디오 형식을 선택해 주세요. " + ' / '.join(failures))
 
 
 def best_shift(target, measured, current=0):
@@ -59,9 +84,9 @@ def run(command, emit):
         raise ValueError("사용할 입력과 출력을 다시 선택해 주세요.")
     if source_id == sink_id or is_virtual_output(sink["name"]):
         raise ValueError("실시간 변환 출력에는 실제 헤드폰이나 스피커를 선택해 주세요.")
-    input_channels, output_channels = min(2, source["max_input_channels"]), min(2, sink["max_output_channels"])
-    sd.check_input_settings(device=source_id, channels=input_channels, samplerate=RATE, dtype="float32")
-    sd.check_output_settings(device=sink_id, channels=output_channels, samplerate=RATE, dtype="float32")
+    input_settings = audio_settings(source_id, 'input')
+    output_settings = audio_settings(sink_id, 'output')
+    input_channels, output_channels = input_settings['channels'], output_settings['channels']
     target = float(command["targetHz"])
     best_shift(target, target)  # Validate before opening input.
     stop = threading.Event()
@@ -89,7 +114,10 @@ def run(command, emit):
             raise sd.CallbackStop
         try:
             chunk = outgoing.get_nowait()
-            data[:] = chunk[:, :output_channels]
+            if output_channels == 1:
+                data[:, 0] = np.mean(chunk, axis=1)
+            else:
+                data[:, :2] = chunk[:, :2]
         except Empty:
             counters["underruns"] += 1
 
@@ -100,8 +128,7 @@ def run(command, emit):
             count = 0
             last_second = -1
             emit("live_status", phase="calibrating", message="8초 동안 평소 목소리로 말하거나 입력 음성을 재생해 주세요.")
-            with sd.InputStream(device=source_id, channels=input_channels, samplerate=RATE,
-                                blocksize=BLOCK, dtype="float32", callback=capture):
+            with sd.InputStream(**input_settings, blocksize=BLOCK, callback=capture):
                 while count < RATE * 8 and not stop.is_set():
                     try:
                         chunk = incoming.get(timeout=1)
@@ -138,7 +165,9 @@ def run(command, emit):
                  trialHz=output_pitch, clamped=clamped or correction_clamped)
             if command.get("calibrationOnly"):
                 emit("standalone_calibrated", shift=shift, targetHz=target,
-                     inputHz=measured["medianHz"], inputName=source["name"], outputName=sink["name"])
+                     inputHz=measured["medianHz"], inputName=source["name"], outputName=sink["name"],
+                     inputApi=sd.query_hostapis(source['hostapi'])['name'],
+                     outputApi=sd.query_hostapis(sink['hostapi'])['name'])
                 return
             host = subprocess.Popen([command["hostPath"], "--state", command["statePath"],
                                      "--pitch-semitones", str(shift), "--stream"],
@@ -177,6 +206,8 @@ def run(command, emit):
                             continue
                         if input_channels == 1:
                             chunk = np.repeat(chunk, 2, axis=1)
+                        else:
+                            chunk = chunk[:, :2]
                         host.stdin.write(chunk.astype("<f4").tobytes())
                         host.stdin.flush()
                         raw = host.stdout.read(BLOCK * 2 * 4)
@@ -191,10 +222,8 @@ def run(command, emit):
 
             worker = threading.Thread(target=process, daemon=True)
             worker.start()
-            with sd.OutputStream(device=sink_id, channels=output_channels, samplerate=RATE,
-                                 blocksize=BLOCK, dtype="float32", callback=playback) as output_stream, \
-                 sd.InputStream(device=source_id, channels=input_channels, samplerate=RATE,
-                                blocksize=BLOCK, dtype="float32", callback=capture) as input_stream:
+            with sd.OutputStream(**output_settings, blocksize=BLOCK, callback=playback) as output_stream, \
+                 sd.InputStream(**input_settings, blocksize=BLOCK, callback=capture) as input_stream:
                 emit("live_status", phase="running", message="실시간 히나나 변환 중", shift=shift,
                      latencyMs=round((latency[0] + input_stream.latency + output_stream.latency) * 1000))
                 while not stop.wait(.5):

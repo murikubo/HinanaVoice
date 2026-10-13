@@ -1,6 +1,6 @@
 {
   "name": "hinana-voice",
-  "version": "0.11.0",
+  "version": "0.12.3",
   "private": true,
   "description": "GPT, VOICEPEAK, VB-CABLE 및 Vocoflex용 음성 대화 프로그램",
   "author": "비나래",
@@ -59,6 +59,7 @@
         "filter": [
           "hinana-backend*",
           "vocoflex-host",
+          "vocoflex-host.exe",
           "VocoflexHost.app/**/*"
         ]
       }

@@ -52,10 +52,48 @@ test('busy conversion preserves its draft and reports an actionable error', (t) 
   assert.throws(() => studio.use(null), /끝난 뒤/);
   assert.equal(studio.job, job);
 });
-test('cancelling re-registration cannot reuse an older saved registration', async (t) => {
+test('cancelling re-registration cannot reuse an older saved registration', { skip: process.platform === 'win32' }, async (t) => {
   const { studio, root, statePath } = fixture(t);
   studio.hostPath = path.join(root, 'cancel-host');
   fs.writeFileSync(studio.hostPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   await assert.rejects(studio.register(), /등록이 취소/);
   assert.equal(fs.readFileSync(statePath, 'utf8'), 'voice-state-fixture');
+});
+
+test('target WAV can be saved without synthesis or preview and survives restart', async (t) => {
+  const { studio, root } = fixture(t);
+  const oldJob = studio.job;
+  const reference = path.join(root, 'hinana_2min.wav');
+  fs.writeFileSync(reference, 'test-audio');
+  studio.runBackend = (command) => {
+    assert.equal(command.action, 'voice_target');
+    assert.equal(command.referencePath, reference);
+    return Promise.resolve({ reference: { medianHz: 456.7 } });
+  };
+  studio.registerState = async (selected, state) => {
+    assert.equal(studio.busy, true);
+    assert.equal(selected, reference);
+    fs.writeFileSync(state, 'registered-state');
+  };
+  const result = await studio.createTarget(reference, { narrator: 'Koharu Rikka', speed: 95, pitch: 0 });
+  const fresh = new VoiceStudio({ root, hostPath: studio.hostPath, runBackend: () => {} });
+  const target = fresh.profile(result.savedId);
+  assert.equal(target.referenceHz, 456.7);
+  assert.equal(target.name, 'hinana_2min');
+  assert.equal(target.targetOnly, true);
+  assert.equal(fs.readFileSync(target.statePath, 'utf8'), 'registered-state');
+  assert.equal(studio.job, oldJob);
+  assert.equal(studio.busy, false);
+  assert.throws(() => fresh.use(target.id), /자동 보정용/);
+});
+
+test('cancelled target registration does not publish a profile', async (t) => {
+  const { studio, root } = fixture(t);
+  const reference = path.join(root, 'target.wav');
+  fs.writeFileSync(reference, 'test-audio');
+  studio.runBackend = () => Promise.resolve({ reference: { medianHz: 456 } });
+  studio.registerState = async () => { throw new Error('등록이 취소되었습니다.'); };
+  await assert.rejects(studio.createTarget(reference, {}), /등록이 취소/);
+  assert.equal(studio.list().profiles.length, 0);
+  assert.equal(studio.busy, false);
 });

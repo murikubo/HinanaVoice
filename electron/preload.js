@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("hinana", {
   voiceList: () => ipcRenderer.invoke('voice:list'),
   voiceSelect: () => ipcRenderer.invoke('voice:select'),
   voiceRegister: () => ipcRenderer.invoke('voice:register'),
+  createVoiceTarget: () => ipcRenderer.invoke('voice:createTarget'),
   voiceAnalyze: () => ipcRenderer.invoke('voice:analyze'),
   voicePreview: (request) => ipcRenderer.invoke('voice:preview', request),
   voiceSave: (request) => ipcRenderer.invoke('voice:save', request),

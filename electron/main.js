@@ -259,9 +259,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  const hostPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'backend', 'bin', 'VocoflexHost.app', 'Contents', 'MacOS', 'vocoflex-host')
-    : path.join(app.getAppPath(), 'backend-bin', 'VocoflexHost.app', 'Contents', 'MacOS', 'vocoflex-host');
+  const hostRoot = app.isPackaged ? path.join(process.resourcesPath, 'backend', 'bin') : path.join(app.getAppPath(), 'backend-bin');
+  const hostPath = process.platform === 'win32' ? path.join(hostRoot, 'vocoflex-host.exe')
+    : path.join(hostRoot, 'VocoflexHost.app', 'Contents', 'MacOS', 'vocoflex-host');
   voiceStudio = new VoiceStudio({ root: path.join(app.getPath('userData'), 'voice-presets'),
     hostPath, runBackend,
     seedDirectory: app.isPackaged ? null : path.join(app.getAppPath(), 'artifacts', 'vocoflex-lab', 'pitch-matched') });
@@ -270,12 +270,14 @@ app.whenReady().then(() => {
     applyStandalone: async (profile, calibration) => {
       const configured = loadSettings().vocoflexPath;
       if (!vocoflex.resolvePath(configured)) throw new Error('Vocoflex 앱 설치 경로를 확인해 주세요.');
-      await runFile(hostPath, ['--quit-standalone'], { timeout: 20000 });
+      if (process.platform === 'win32') await vocoflex.quitStandalone();
+      else await runFile(hostPath, ['--quit-standalone'], { timeout: 20000 });
       let result, opened;
       try {
         result = await runBackend({ action: 'standalone_apply', statePath: profile.statePath,
           settingsPath: path.join(app.getPath('appData'), 'Dreamtonics', 'Vocoflex', 'settings', 'settings.xml'),
-          name: profile.name, shift: calibration.shift, inputName: calibration.inputName, outputName: calibration.outputName });
+          name: profile.name, shift: calibration.shift, inputName: calibration.inputName, outputName: calibration.outputName,
+          platform: process.platform, inputApi: calibration.inputApi, outputApi: calibration.outputApi });
       } finally { opened = await vocoflex.ensureRunning(configured); }
       if (!opened.running) throw new Error(`설정은 저장했습니다. Vocoflex를 직접 실행해 주세요. ${opened.error || ''}`);
       return result;
@@ -286,27 +288,35 @@ app.whenReady().then(() => {
     return work();
   };
   ipcMain.handle('voice:list', () => voiceStudio.list());
-  ipcMain.handle('live:devices', () => runBackend({ action: 'live_devices' }));
+  ipcMain.handle('live:devices', async () => ({ ...await runBackend({ action: 'live_devices' }), platform: process.platform }));
   ipcMain.handle('live:status', () => liveVoice.status());
   ipcMain.handle('live:start', (_event, request) => studioWork(async () => {
-    if (process.platform !== 'darwin') throw new Error('실시간 Vocoflex 변환은 macOS에서 지원합니다.');
-    if (!await systemPreferences.askForMediaAccess('microphone')) throw new Error('시스템 설정의 마이크 권한에서 Hinana Voice를 허용해 주세요.');
+    if (process.platform === 'darwin' && !await systemPreferences.askForMediaAccess('microphone')) throw new Error('시스템 설정의 마이크 권한에서 Hinana Voice를 허용해 주세요.');
+    if (!voiceStudio.list().available) throw new Error('Vocoflex 변환 도구가 준비되지 않았습니다.');
     return liveVoice.start(request);
   }));
   ipcMain.handle('live:stop', () => liveVoice.stop());
   ipcMain.handle('voice:select', async () => studioWork(async () => {
-    if (process.platform !== 'darwin') throw new Error('음성 프리셋은 현재 macOS에서 지원합니다.');
+    if (!voiceStudio.list().available) throw new Error('Vocoflex 변환 도구가 준비되지 않았습니다.');
     const result = await dialog.showOpenDialog(mainWindow, { title: '참고 음성 선택',
       properties: ['openFile'], filters: [{ name: '음성', extensions: ['wav', 'flac', 'ogg'] }] });
     return result.canceled ? null : voiceStudio.selectReference(result.filePaths[0], loadSettings());
   }));
   ipcMain.handle('voice:register', () => studioWork(() => voiceStudio.register()));
+  ipcMain.handle('voice:createTarget', () => studioWork(async () => {
+    if (voiceStudio.busy) throw new Error('현재 음성 작업을 마친 뒤 목표를 등록해 주세요.');
+    if (!voiceStudio.list().available) throw new Error('Vocoflex 변환 도구가 준비되지 않았습니다.');
+    const result = await dialog.showOpenDialog(mainWindow, { title: '맞출 목표 목소리 선택',
+      properties: ['openFile'], filters: [{ name: '목표 음성', extensions: ['wav', 'flac', 'ogg'] }] });
+    return result.canceled ? null : voiceStudio.createTarget(result.filePaths[0], loadSettings());
+  }));
   ipcMain.handle('voice:analyze', () => studioWork(() => voiceStudio.analyze()));
   ipcMain.handle('voice:preview', (_event, request) => studioWork(() => voiceStudio.preview(request)));
   ipcMain.handle('voice:save', (_event, request) => voiceStudio.save(request));
   ipcMain.handle('voice:use', (_event, id) => studioWork(async () => {
     if (id) {
       const profile = voiceStudio.profile(id);
+      if (profile.targetOnly) throw new Error('자동 보정용 목표입니다. 대화 음성용 프리셋은 음성 프리셋 화면에서 별도로 만들어 주세요.');
       const current = loadSettings();
       const probe = await runBackend({ action: 'probe', voicepeak: profile.voicepeak || current.voicepeak });
       const outputs = probe.devices.filter((device) => !device.virtual);

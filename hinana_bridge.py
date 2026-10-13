@@ -328,6 +328,8 @@ def main() -> int:
             emit("standalone_applied", **standalone_vocoflex.apply(command))
         elif action == "voice_analyze":
             emit("voice_analysis", **voice_studio.analyze(command))
+        elif action == "voice_target":
+            emit("voice_target", reference=voice_studio.pitch_summary(Path(command['referencePath'])))
         elif action == "voice_preview":
             emit("voice_preview", **voice_studio.preview(command))
         elif action == "chat":

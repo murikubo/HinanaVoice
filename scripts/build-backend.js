@@ -12,7 +12,7 @@ const python = process.env.PYTHON_BIN || (fs.existsSync(venvPython)
   : (process.platform === "win32" ? "python" : "python3"));
 
 fs.mkdirSync(output, { recursive: true });
-if (process.platform === 'darwin') {
+if (process.platform === 'darwin' || process.platform === 'win32') {
   const native = spawnSync(process.execPath, [path.join(__dirname, 'build-vocoflex-lab.js')], { cwd: root, stdio: 'inherit' });
   if (native.error) throw native.error;
   if (native.status !== 0) process.exit(native.status || 1);

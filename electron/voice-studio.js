@@ -36,11 +36,11 @@ class VoiceStudio {
     const profiles = fs.readdirSync(this.root).filter((id) => /^[0-9a-f-]{36}$/.test(id))
       .map((id) => this.readJSON(path.join(this.root, id, 'profile.json'))).filter(Boolean);
     const activeId = this.readJSON(path.join(this.root, 'preferences.json'), {}).activeId || null;
-    return { available: process.platform === 'darwin' && fs.existsSync(this.hostPath), profiles, activeId };
+    return { available: ['darwin', 'win32'].includes(process.platform) && fs.existsSync(this.hostPath), profiles, activeId };
   }
   use(id) {
     if (this.busy) throw new Error('음성 작업이 끝난 뒤 프리셋을 적용해 주세요.');
-    if (id) this.profile(id);
+    if (id && this.profile(id).targetOnly) throw new Error('이 목소리는 자동 보정용 목표입니다. 대화에 적용하려면 음성 프리셋에서 VOICEPEAK 비교·미리 듣기를 완료해 주세요.');
     this.writeJSON(path.join(this.root, 'preferences.json'), { activeId: id || null });
     return this.list();
   }
@@ -67,11 +67,16 @@ class VoiceStudio {
     return this.locked(async () => {
       const job = this.job;
       if (!job) throw new Error('먼저 참고 음성을 선택해 주세요.');
-      if (!fs.existsSync(this.hostPath)) throw new Error('macOS용 Vocoflex 변환 도구가 필요합니다.');
-      const registrationPath = path.join(job.directory, `${crypto.randomUUID()}.aupreset`);
+      await this.registerState(job.referencePath, job.statePath);
+      return { registered: true };
+    });
+  }
+  async registerState(referencePath, statePath) {
+      if (!fs.existsSync(this.hostPath)) throw new Error('Vocoflex 변환 도구가 필요합니다. 앱을 다시 설치해 주세요.');
+      const registrationPath = path.join(path.dirname(statePath), `${crypto.randomUUID()}.aupreset`);
       await new Promise((resolve, reject) => {
-        const child = spawn(this.hostPath, ['--editor', '--reference', job.referencePath,
-          '--finish-on-save', '--save-state', registrationPath], { stdio: ['ignore', 'ignore', 'pipe'] });
+        const child = spawn(this.hostPath, ['--editor', '--reference', referencePath,
+          '--finish-on-save', '--save-state', registrationPath], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
         this.children.add(child);
         let error = '';
         child.stderr.on('data', (data) => { error = (error + data).slice(-4000); });
@@ -79,8 +84,28 @@ class VoiceStudio {
         child.on('close', (code) => { this.children.delete(child); code === 0 ? resolve() : reject(new Error(error || 'Vocoflex 등록 창이 종료되었습니다.')); });
       });
       if (!fs.existsSync(registrationPath)) throw new Error('등록이 취소되었습니다. 음색을 등록하고 ‘등록 저장’을 눌러 주세요.');
-      fs.renameSync(registrationPath, job.statePath);
-      return { registered: true };
+      fs.renameSync(registrationPath, statePath);
+  }
+  async createTarget(referencePath, settings) {
+    return this.locked(async () => {
+      if (fs.statSync(referencePath).size > 150 * 1024 * 1024) throw new Error('목표 음성은 150MB 이하로 선택해 주세요.');
+      const jobDirectory = path.join(this.root, 'jobs', crypto.randomUUID());
+      fs.mkdirSync(jobDirectory, { recursive: true });
+      const statePath = path.join(jobDirectory, 'voice.aupreset');
+      // Analyze the chosen file itself. No API key or VOICEPEAK is needed.
+      const result = await this.backend({ action: 'voice_target', referencePath });
+      if (!Number.isFinite(result.reference?.medianHz) || result.reference.medianHz <= 0) throw new Error('목표 음높이를 분석할 수 없습니다.');
+      await this.registerState(referencePath, statePath);
+      const id = crypto.randomUUID();
+      const directory = path.join(this.root, id);
+      fs.mkdirSync(directory);
+      fs.copyFileSync(statePath, path.join(directory, 'voice.aupreset'));
+      this.writeJSON(path.join(directory, 'profile.json'), {
+        id, name: path.basename(referencePath, path.extname(referencePath)), targetOnly: true,
+        shift: 0, narrator: settings.narrator, speed: settings.speed, pitch: settings.pitch,
+        referenceName: path.basename(referencePath), referenceHz: result.reference.medianHz,
+      });
+      return { ...this.list(), savedId: id };
     });
   }
   async analyze() {
@@ -143,7 +168,13 @@ class VoiceStudio {
       referenceName: path.basename(report.reference), referenceHz: report.reference_pitch.median_hz,
       inputHz: report.input_pitch.median_hz });
   }
-  stop() { for (const child of this.children) child.kill(); }
+  stop() {
+    for (const child of this.children) {
+      if (process.platform === 'win32' && child.pid && child.exitCode == null) {
+        require('node:child_process').execFile('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, () => {});
+      } else child.kill();
+    }
+  }
 }
 
 module.exports = { VoiceStudio };

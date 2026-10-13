@@ -40,3 +40,15 @@ class StandaloneTests(unittest.TestCase):
             self.assertEqual(Path(result['backupPath']).read_bytes(), original)
             with self.assertRaises(ValueError):
                 apply({'settingsPath': str(settings), 'statePath': str(state), 'shift': 50})
+            apply({'settingsPath': str(settings), 'statePath': str(state), 'shift': 3,
+                   'name': 'Windows', 'platform': 'win32', 'inputApi': 'Windows WASAPI',
+                   'outputApi': 'Windows WASAPI', 'inputName': 'Mic', 'outputName': 'Speakers'})
+            windows_audio = ET.fromstring(ET.parse(settings).getroot().find('Audio').get('audioSetup'))
+            self.assertEqual(windows_audio.get('deviceType'), 'Windows Audio')
+            self.assertEqual(windows_audio.get('audioDeviceBufferSize'), '512')
+            before = settings.read_bytes()
+            with self.assertRaises(ValueError):
+                apply({'settingsPath': str(settings), 'statePath': str(state), 'shift': 3,
+                       'platform': 'win32', 'inputApi': 'MME', 'outputApi': 'Windows WASAPI',
+                       'inputName': 'Mic', 'outputName': 'Speakers'})
+            self.assertEqual(settings.read_bytes(), before)

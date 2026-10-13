@@ -66,7 +66,16 @@ def apply(command):
         if audio is None:
             audio = ET.SubElement(root, 'Audio')
         setup = ET.fromstring(audio.get('audioSetup', '<DEVICESETUP/>'))
-        setup.set('deviceType', 'CoreAudio')
+        if command.get('platform') == 'win32':
+            mapping = {'Windows WASAPI': 'Windows Audio', 'Windows DirectSound': 'DirectSound', 'MME': 'Windows Audio'}
+            input_api, output_api = command.get('inputApi'), command.get('outputApi')
+            if input_api != output_api or input_api not in mapping:
+                raise ValueError('Vocoflex 자체 설정에는 같은 Windows 오디오 API의 입력과 출력을 선택해 주세요.')
+            if input_api == 'MME':
+                raise ValueError('장치 이름이 잘리지 않는 Windows WASAPI 입력과 출력을 선택해 주세요.')
+            setup.set('deviceType', mapping[input_api])
+        else:
+            setup.set('deviceType', 'CoreAudio')
         setup.set('audioInputDeviceName', command['inputName'])
         setup.set('audioOutputDeviceName', command['outputName'])
         setup.set('audioDeviceRate', '48000.0')

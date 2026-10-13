@@ -12,6 +12,10 @@ function voiceControls() {
   const unavailable = voicePending || busy || !voiceCatalog.available;
   for (const id of ['voiceSelect', 'voiceDisable']) voiceElement(id).disabled = unavailable;
   for (const id of ['voiceListenSaved', 'voiceApply']) voiceElement(id).disabled = unavailable || !voiceElement('voicePreset').value;
+  if (voiceCatalog.profiles.find(p => p.id === voiceElement('voicePreset').value)?.targetOnly) {
+    voiceElement('voiceApply').disabled = true;
+    voiceElement('voiceListenSaved').disabled = true;
+  }
   voiceElement('voiceRegister').disabled = unavailable || !voiceSelected;
   voiceElement('voiceAnalyze').disabled = unavailable || !voiceRegistered;
   voiceElement('voicePreview').disabled = unavailable || !voiceAnalyzed;
@@ -21,7 +25,8 @@ function voiceControls() {
 function voicePresetInfo() {
   const selected = voiceCatalog.profiles.find((item) => item.id === voiceElement('voicePreset').value);
   voiceElement('voicePresetInfo').textContent = selected
-    ? `${selected.narrator} · ${selected.shift > 0 ? '+' : ''}${selected.shift}반음${selected.id === voiceCatalog.activeId ? ' · 대화에 적용 중' : ''}` : '참고 음색을 등록해 첫 프리셋을 만들어 보세요.';
+    ? selected.targetOnly ? `자동 보정용 목표 · 참고 ${Math.round(selected.referenceHz)}Hz · Vocoflex 자동 설정에서 선택하세요.`
+      : `${selected.narrator} · ${selected.shift > 0 ? '+' : ''}${selected.shift}반음${selected.id === voiceCatalog.activeId ? ' · 대화에 적용 중' : ''}` : '참고 음색을 등록해 첫 프리셋을 만들어 보세요.';
   const active = voiceCatalog.profiles.find((item) => item.id === voiceCatalog.activeId);
   voiceElement('voiceStudioButton').textContent = active ? `목소리 · ${active.name}` : '음성 프리셋';
   voiceControls();
@@ -33,8 +38,8 @@ async function refreshVoiceCatalog(preferred) {
   voiceElement('voicePreset').replaceChildren(...(options.length ? options : [new Option('저장된 프리셋 없음', '')]));
   if (selection && voiceCatalog.profiles.some((item) => item.id === selection)) voiceElement('voicePreset').value = selection;
   voiceElement('voiceNotice').textContent = voiceCatalog.available
-    ? '참고 음성은 이 Mac에서만 처리합니다. Vocoflex가 설치·활성화되어 있어야 합니다.'
-    : '음성 프리셋은 macOS용 기능입니다. Vocoflex와 변환 도구가 필요합니다.';
+    ? '참고 음성은 이 PC에서만 처리합니다. Vocoflex가 설치·활성화되어 있어야 합니다.'
+    : 'Vocoflex 변환 도구가 준비되지 않았습니다. Vocoflex와 앱을 다시 설치해 주세요.';
   voicePresetInfo();
 }
 async function voiceWork(message, task) {

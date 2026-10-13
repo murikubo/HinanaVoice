@@ -153,6 +153,8 @@
       <div class="route-help">8초 발성 분석 → 히나나 음색·피치를 Vocoflex에 저장 → Vocoflex 재실행</div>
       <label><span>사용 방식</span><select id="liveMode"><option value="standalone">Vocoflex 자체에 자동 설정 (적용 후 독립 사용)</option><option value="monitor">Hinana Voice 안에서만 실시간 변환</option></select></label>
       <label><span>맞출 목소리</span><select id="liveProfile"></select></label>
+      <button id="liveTarget" class="secondary-button" type="button">목표 WAV 등록…</button>
+      <p class="setting-note">목표 WAV를 선택하면 음높이를 분석하고 Vocoflex 음색 등록 창을 엽니다. Import로 같은 파일을 가져온 뒤 ‘등록 저장’을 누르면 위 목록에 추가됩니다. API 키·VOICEPEAK 미리 듣기는 필요하지 않습니다.</p>
       <label><span>입력 마이크 또는 가상 케이블</span><select id="liveInput"></select></label>
       <label><span>듣는 장치</span><select id="liveOutput"></select></label>
       <p class="setting-note">마이크 입력은 헤드폰 사용을 권장합니다. 가상 케이블은 다른 앱의 출력을 해당 케이블로 보내세요. 처음 8초 동안 평소 목소리로 말하거나 입력을 재생해 주세요.</p>

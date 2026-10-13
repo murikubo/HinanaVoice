@@ -2,6 +2,17 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
+if (process.platform === 'win32') {
+  const root = path.resolve(__dirname, '..');
+  const localPython = path.join(root, '.venv', 'Scripts', 'python.exe');
+  const python = process.env.PYTHON_BIN || (fs.existsSync(localPython) ? localPython : 'python');
+  const build = spawnSync(python, ['-m', 'PyInstaller', '--noconfirm', '--clean', '--onefile', '--console',
+    '--name', 'vocoflex-host', '--distpath', path.join(root, 'backend-bin'),
+    '--workpath', path.join(root, 'build', 'windows-host'), '--specpath', path.join(root, 'build', 'windows-host'),
+    '--collect-all', 'pedalboard', path.join(root, 'windows_vocoflex_host.py')], { stdio: 'inherit' });
+  if (build.error) throw build.error;
+  process.exit(build.status || 0);
+}
 if (process.platform !== 'darwin') {
   console.error('Vocoflex Lab uses the macOS Audio Unit plugin.');
   process.exit(1);

@@ -3,7 +3,7 @@ const liveEl = (id) => document.getElementById(id);
 let liveRunning = false;
 let livePending = false;
 function liveControls() {
-  for (const id of ['liveMode', 'liveProfile', 'liveInput', 'liveOutput', 'liveRefresh']) liveEl(id).disabled = liveRunning || livePending;
+  for (const id of ['liveMode', 'liveProfile', 'liveInput', 'liveOutput', 'liveRefresh', 'liveTarget']) liveEl(id).disabled = liveRunning || livePending;
   liveEl('liveStart').disabled = liveRunning || livePending || !liveEl('liveProfile').value || !liveEl('liveInput').value || !liveEl('liveOutput').value;
   liveEl('liveStop').disabled = !liveRunning;
   liveEl('liveVoiceButton').textContent = liveRunning ? '● 음성 맞춤 중' : 'Vocoflex 자동 설정';
@@ -13,22 +13,24 @@ function liveMessage(message, error = false) {
   liveEl('liveMessage').textContent = message;
   liveEl('liveMessage').classList.toggle('error', error);
 }
-async function liveRefresh() {
+async function liveRefresh(preferred) {
   livePending = true; liveControls();
   try {
     const [catalog, result] = await Promise.all([window.hinana.voiceList(), window.hinana.liveDevices()]);
+    const windowsStandalone = result.platform === 'win32' && liveEl('liveMode').value === 'standalone';
+    const devices = windowsStandalone ? result.devices.filter(d => d.api === 'Windows WASAPI') : result.devices;
     const profiles = catalog.profiles.filter((p) => p.referenceHz > 0);
-    const previous = liveEl('liveProfile').value;
+    const previous = typeof preferred === 'string' ? preferred : liveEl('liveProfile').value;
     liveEl('liveProfile').replaceChildren(...profiles.map((p) => new Option(`${p.name} · 참고 ${Math.round(p.referenceHz)}Hz`, p.id)));
     liveEl('liveProfile').value = profiles.find((p) => p.id === previous)?.id || profiles.find((p) => p.name === '히나나')?.id || profiles[0]?.id || '';
     for (const [id, rows, defaultKey] of [
-      ['liveInput', result.devices.filter((d) => d.inputs > 0), 'defaultInput'],
-      ['liveOutput', result.devices.filter((d) => d.outputs > 0 && !d.virtual), 'defaultOutput']]) {
+      ['liveInput', devices.filter((d) => d.inputs > 0), 'defaultInput'],
+      ['liveOutput', devices.filter((d) => d.outputs > 0 && !d.virtual), 'defaultOutput']]) {
       const previousId = liveEl(id).value;
       liveEl(id).replaceChildren(...rows.map((d) => new Option(`${d.name} · ${d.api}`, String(d.id))));
       liveEl(id).value = String(rows.find((d) => String(d.id) === previousId)?.id ?? rows.find((d) => d[defaultKey])?.id ?? rows[0]?.id ?? '');
     }
-    if (!profiles.length) liveMessage('음성 프리셋에서 참고 목소리를 먼저 등록해 주세요.', true);
+    if (!profiles.length) liveMessage('목표 WAV 등록을 눌러 맞출 목소리 파일을 선택해 주세요.');
   } catch (error) { liveMessage(error.message, true); }
   finally { livePending = false; liveControls(); }
 }
@@ -37,7 +39,20 @@ liveEl('liveVoiceButton').addEventListener('click', async () => {
   if (!liveRunning) await liveRefresh();
 });
 liveEl('liveRefresh').addEventListener('click', liveRefresh);
-liveEl('liveMode').addEventListener('change', liveControls);
+liveEl('liveTarget').addEventListener('click', async () => {
+  if (liveRunning || livePending || busy) return;
+  livePending = true; liveControls();
+  liveMessage('목표 파일을 선택해 주세요. 분석 후 Vocoflex Import에서 같은 파일을 등록하고 ‘등록 저장’을 누르세요.');
+  try {
+    const result = await window.hinana.createVoiceTarget();
+    if (!result) { liveMessage('목표 파일 선택을 취소했습니다.'); return; }
+    await liveRefresh(result.savedId);
+    await refreshVoiceCatalog();
+    liveMessage('목표 목소리를 저장하고 선택했습니다. 입력·출력을 고르고 8초 분석을 시작하세요.');
+  } catch (error) { liveMessage(error.message, true); }
+  finally { livePending = false; liveControls(); }
+});
+liveEl('liveMode').addEventListener('change', liveRefresh);
 liveEl('liveStart').addEventListener('click', async () => {
   livePending = true; liveControls(); liveMessage('입력 권한과 장치를 확인하고 있어요…');
   liveEl('liveMatchInfo').textContent = ''; liveEl('liveHealth').textContent = '';

@@ -56,6 +56,14 @@ class LiveVoice {
     const operation = this.operation;
     if (!operation) return;
     this.stopping = true;
+    if (process.platform === 'win32' && operation.child?.pid && operation.child.exitCode == null) {
+      // Windows kill() does not signal Python's cleanup handler; terminate its
+      // process tree so the persistent VST3 host cannot outlive its audio owner.
+      const { execFile } = require('node:child_process');
+      await new Promise(resolve => execFile('taskkill.exe', ['/PID', String(operation.child.pid), '/T', '/F'], { windowsHide: true }, resolve));
+      await operation.catch(() => {});
+      return;
+    }
     const terminate = (signal) => {
       try {
         if (process.platform !== 'win32' && operation.child?.pid) process.kill(-operation.child.pid, signal);

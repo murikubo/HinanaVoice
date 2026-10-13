@@ -63,4 +63,9 @@ function ensureRunning(configured) {
   return launchTask;
 }
 
-module.exports = { candidates, resolvePath, inspect, ensureRunning };
+async function quitStandalone() {
+  const script = "$items = @(Get-Process -Name vocoflex -ErrorAction SilentlyContinue); foreach ($item in $items) { if (-not $item.CloseMainWindow()) { throw 'Vocoflex window could not be closed. Close its dialogs and retry.' } }; foreach ($item in $items) { if (-not $item.WaitForExit(15000)) { throw 'Vocoflex did not close. Save or dismiss its dialog and retry.' } }";
+  await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { windowsHide: true, timeout: 20000 });
+  if (await isRunning()) throw new Error('Vocoflex 창을 닫은 뒤 다시 시도해 주세요.');
+}
+module.exports = { candidates, resolvePath, inspect, ensureRunning, quitStandalone };
